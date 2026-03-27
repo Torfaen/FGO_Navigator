@@ -1,0 +1,14 @@
+mumu_dir: "C:/Program Files/Netease/MuMu Player 12/nx_main"
+mumu_index: 0
+adb_path: "C:/Program Files/Netease/MuMu Player 12/nx_main/adb.exe"
+adb_port: 16384
+package_name: "com.bilibili.fatego"
+adb_connect_timeout_sec: 120
+home_wait_timeout_sec: 120
+chapter_templates: "assets/templates/chapter/ordeal_call.png"
+target_stage_template: "assets/templates/chapter/mission/moon_mine.png"
+target_stage_threshold: 0.78
+bbchannel_enabled: true
+bbchannel_debug_cmd: "C:/Users/ASUS/Desktop/auto/BBchannel/启动.cmd"
+bbchannel_workdir: "C:/Users/ASUS/Desktop/auto/BBchannel"
+bbchannel_monitor_sec: 20

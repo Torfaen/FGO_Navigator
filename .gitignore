@@ -1,0 +1,22 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# 运行产物 / 本地状态（勿提交）
+*.log
+latest_screen.png
+bbchannel_click_preview.png
+DATA/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+Thumbs.db
