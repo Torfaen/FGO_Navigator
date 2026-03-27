@@ -8,21 +8,27 @@ from core.emulator import EmulatorLauncher
 from core.script_exit import apply_script_end_action_for_launcher
 from flows.startup_flow import StartupFlow
 
+# 与 BAAH 类工具一致：`X.X.X - MM:SS - LEVEL : 正文`（1-based 第 9～13 列为 MM:SS）
+# 版本号须保持 5 字符（如 1.0.0），否则外部「时间戳列号」需重算
+SCRIPT_LOG_VERSION = "1.0.0"
+
 
 class _Tee:
-    def __init__(self, *streams):
+    def __init__(self, *streams, level: str = "INFO"):
         self.streams = streams
         self._line_start = True
+        self.level = level
 
     def write(self, data):
         if not data:
             return
-        # 每行前加 [MM:SS]，便于外部脚本按固定时间格式解析
         chunks = data.splitlines(keepends=True)
         out = ""
         for chunk in chunks:
             if self._line_start and chunk not in ("\n", "\r\n"):
-                out += f"[{datetime.now():%M:%S}] "
+                out += (
+                    f"{SCRIPT_LOG_VERSION} - {datetime.now():%M:%S} - {self.level} : "
+                )
             out += chunk
             self._line_start = chunk.endswith("\n")
         for s in self.streams:
@@ -44,8 +50,8 @@ def main() -> int:
     ) as legacy_log_file:
         old_stdout = sys.stdout
         old_stderr = sys.stderr
-        sys.stdout = _Tee(old_stdout, ts_log_file, legacy_log_file)
-        sys.stderr = _Tee(old_stderr, ts_log_file, legacy_log_file)
+        sys.stdout = _Tee(old_stdout, ts_log_file, legacy_log_file, level="INFO")
+        sys.stderr = _Tee(old_stderr, ts_log_file, legacy_log_file, level="ERROR")
         try:
             code = _run_main()
             if code == 0:
