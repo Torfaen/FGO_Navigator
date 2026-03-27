@@ -1,6 +1,5 @@
 from pathlib import Path
 import time
-from typing import Optional
 
 from core.adb import AdbClient
 from core.vision import MatchResult, TemplateMatcher
@@ -19,12 +18,6 @@ class OrdealCallHandler:
         _last_time_scales = [1.0, 0.8, 0.7, 0.62, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35, 0.3]
         self.last_time_matcher = TemplateMatcher(
             str(Path("assets/templates/chapter/mission/last_time.png")),
-            threshold=0.75,
-            use_gray=True,
-            scales=_last_time_scales,
-        )
-        self.last_time_1_matcher = TemplateMatcher(
-            str(Path("assets/templates/chapter/mission/last_time_1.png")),
             threshold=0.75,
             use_gray=True,
             scales=_last_time_scales,
@@ -79,28 +72,14 @@ class OrdealCallHandler:
                         return True, False, MatchResult(False, 0.0, 0, 0)
 
             match_last = self.last_time_matcher.match_png_bytes(shot)
-            match_last_1 = self.last_time_1_matcher.match_png_bytes(shot)
             print(
-                f"{stage_prefix} [Match] last_time score={match_last.score:.4f} ({match_last.score * 100:.2f}%) | "
-                f"last_time_1 score={match_last_1.score:.4f} ({match_last_1.score * 100:.2f}%)"
+                f"{stage_prefix} [Match] last_time score={match_last.score:.4f} ({match_last.score * 100:.2f}%)"
             )
-            th = self.last_time_matcher.threshold
-            hit: Optional[MatchResult] = None
-            hit_label = ""
-            if match_last.score >= th and match_last_1.score >= th:
-                hit = match_last if match_last.score >= match_last_1.score else match_last_1
-                hit_label = "last_time" if hit is match_last else "last_time_1"
-            elif match_last.score >= th:
-                hit = match_last
-                hit_label = "last_time"
-            elif match_last_1.score >= th:
-                hit = match_last_1
-                hit_label = "last_time_1"
-            if hit is not None:
-                adb.tap(hit.center_x, hit.center_y)
+            if match_last.score >= self.last_time_matcher.threshold:
+                adb.tap(match_last.center_x, match_last.center_y)
                 self.last_time_clicked = True
                 print(
-                    f"{stage_prefix} [Flow] 命中 {hit_label} 并点击({hit.center_x},{hit.center_y})，开始找目标小关卡"
+                    f"{stage_prefix} [Flow] 命中 last_time 并点击({match_last.center_x},{match_last.center_y})，开始找目标小关卡"
                 )
                 return True, False, MatchResult(False, 0.0, 0, 0)
 
