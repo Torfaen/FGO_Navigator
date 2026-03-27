@@ -49,6 +49,8 @@ class EmulatorConfig:
     bbchannel_debug_cmd: str
     bbchannel_workdir: str
     bbchannel_monitor_sec: int
+    # none | close_game | close_emulator — 脚本正常/异常结束时的统一收尾（含 BBchannel 跑完后）
+    script_end_action: str
 
 
 class EmulatorLauncher:
@@ -82,6 +84,7 @@ class EmulatorLauncher:
             bbchannel_debug_cmd=data.get("bbchannel_debug_cmd", r"C:/Users/ASUS/Desktop/auto/BBchannel/启动_debug.cmd"),
             bbchannel_workdir=data.get("bbchannel_workdir", r"C:/Users/ASUS/Desktop/auto/BBchannel"),
             bbchannel_monitor_sec=int(data.get("bbchannel_monitor_sec", 20)),
+            script_end_action=data.get("script_end_action", "close_game"),
         )
         return cls(config)
 

@@ -22,24 +22,6 @@ _LOG_FILE_HANDLE = None
 _LOG_PATH = Path("bbchannel_runtime.log")
 
 
-def _read_simple_yaml(path: str) -> dict[str, str]:
-    data: dict[str, str] = {}
-    cfg = Path(path)
-    if not cfg.exists():
-        return data
-    try:
-        with open(cfg, "r", encoding="utf-8") as f:
-            for raw in f:
-                line = raw.strip()
-                if not line or line.startswith("#") or ":" not in line:
-                    continue
-                key, value = line.split(":", 1)
-                data[key.strip()] = value.strip().strip("'").strip('"')
-    except Exception:
-        return {}
-    return data
-
-
 def _init_log_file(overwrite: bool = False) -> None:
     global _LOG_FILE_HANDLE
     mode = "w" if overwrite else "a"
@@ -179,56 +161,6 @@ def _check_stop_dialog_and_log(template_path: str = "assets/templates/bbchannel/
         print(f"[BBchannel] 命中 stop 模板 score={max_val:.4f}, loc={max_loc}，停止运行")
         return True
     return False
-
-
-def _close_fgo_game_only() -> None:
-    """只关闭 FGO 进程，保留模拟器。"""
-    cfg = _read_simple_yaml("config/settings.yaml")
-    package = cfg.get("package_name", "com.bilibili.fatego")
-    serial = f"127.0.0.1:{int(cfg.get('adb_port', '16384'))}"
-    adb_candidates = []
-    adb_path_cfg = cfg.get("adb_path", "").strip()
-    if adb_path_cfg:
-        adb_candidates.append(Path(adb_path_cfg))
-    mumu_dir_cfg = cfg.get("mumu_dir", "").strip()
-    if mumu_dir_cfg:
-        adb_candidates.append(Path(mumu_dir_cfg) / "adb.exe")
-    adb_candidates.extend(
-        [
-            Path(r"C:/Program Files/Netease/MuMu Player 12/nx_main/adb.exe"),
-            Path(r"C:/Users/ASUS/Desktop/auto/BBchannel/adb/adb.exe"),
-        ]
-    )
-    commands = []
-    for adb in adb_candidates:
-        if adb.exists():
-            commands.append([str(adb), "-s", serial, "shell", "am", "force-stop", package])
-            commands.append([str(adb), "shell", "am", "force-stop", package])
-
-    if not commands:
-        print("[BBchannel] 未找到可用 adb.exe，无法关闭 FGO 进程")
-        return
-
-    for cmd in commands:
-        try:
-            result = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="ignore",
-                timeout=10,
-                check=False,
-            )
-            print(f"[BBchannel] 执行关闭FGO命令: {' '.join(cmd)}")
-            if result.stdout:
-                print(result.stdout.strip())
-            if result.returncode == 0:
-                print("[BBchannel] 已执行 FGO 进程关闭（模拟器保留运行）")
-                return
-        except Exception as exc:
-            print(f"[BBchannel] 关闭FGO命令异常: {exc}")
 
 
 def _click_confirm_button_background(keyword: str = "bbchannel64位") -> bool:
@@ -476,8 +408,9 @@ def run_forever(keyword: str = "bbchannel64位", interval_sec: float = 2.0) -> i
                 template_path="assets/templates/bbchannel/stop.png",
                 threshold=0.78,
             ):
-                _close_fgo_game_only()
-                print("[BBchannel] 检测到“脚本停止”，结束运行")
+                print(
+                    "[BBchannel] 检测到「脚本停止」，结束运行（关游戏/模拟器由 main 按 script_end_action 统一执行）"
+                )
                 return 0
             time.sleep(max(0.2, interval_sec))
     except KeyboardInterrupt:

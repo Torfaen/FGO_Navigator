@@ -12,6 +12,9 @@ CLOSE_TEMPLATE_SCALES: List[float] = [
     round(2.0 - i * (1.7 / 9), 4) for i in range(10)
 ]
 
+# login_0 / login_1 / update（开始更新资料）共用倍率
+_LOGIN_SCALES: List[float] = [1.0, 0.62, 0.64, 0.66, 0.67, 0.68, 0.7]
+
 
 class StartupFlow:
     def __init__(
@@ -32,12 +35,17 @@ class StartupFlow:
         self.login_prompt_matcher = TemplateMatcher(
             str(self.templates_dir / "login_0.png"),
             threshold=0.85,
-            scales=[1.0, 0.62, 0.64, 0.66, 0.67, 0.68, 0.7],
+            scales=_LOGIN_SCALES,
         )
         self.login_confirm_matcher = TemplateMatcher(
             str(self.templates_dir / "login_1.png"),
             threshold=0.85,
-            scales=[1.0, 0.62, 0.64, 0.66, 0.67, 0.68, 0.7],
+            scales=_LOGIN_SCALES,
+        )
+        self.update_matcher = TemplateMatcher(
+            str(self.templates_dir / "icon" / "update.png"),
+            threshold=0.85,
+            scales=_LOGIN_SCALES,
         )
         self.close_notice_matcher = TemplateMatcher(
             str(self.templates_dir / "icon" / "close_ann.png"),
@@ -87,6 +95,7 @@ class StartupFlow:
         self.close_burst_min_interval_sec: float = 0.15
         self.close_burst_duration_sec: float = 5.0
         self.login1_mode = False
+        self._skip_update_after_login_seen = False  # 已识别 login 界面后不再检测 update
         self.main_pre_mode = False
         self.main_screen_mode = False
         self.chapter_selected = False
@@ -160,14 +169,7 @@ class StartupFlow:
         if self.main_screen_mode:
             self._log_stage_if_changed("main_screen")
             self._dump_latest_screen(shot)
-            match_close = self.close_matcher.match_png_bytes(shot)
-            self._log_match_score("close", match_close.score)
-            if match_close.score >= self.close_matcher.threshold and self._throttle(0.6):
-                self.adb.tap(match_close.center_x, match_close.center_y)
-                print(
-                    f"{self._stage_prefix()} [Flow] 命中 close 模板 score={match_close.score:.3f}, 点击({match_close.center_x},{match_close.center_y})"
-                )
-                return False
+            # close「关闭」仅在 main_pre（close_ann 后 5s 连点窗口）内匹配，main_screen 不再检测
 
             if not self.chapter_selected:
                 best_chapter_name = ""
@@ -217,6 +219,8 @@ class StartupFlow:
                     shot=shot,
                     stage_prefix=self._stage_prefix(),
                 )
+                if self.ordeal_call_handler.fatal_error:
+                    return True
                 if handled:
                     return done
             else:
@@ -258,15 +262,31 @@ class StartupFlow:
             self.in_fgo_since = time.time()
 
         self._dump_latest_screen(shot)
+        login_th = 0.85
         match1 = self.login_confirm_matcher.match_png_bytes(shot)
+        match0 = self.login_prompt_matcher.match_png_bytes(shot)
+        if match1.score >= login_th or match0.score >= login_th:
+            self._skip_update_after_login_seen = True
+
+        if not self._skip_update_after_login_seen:
+            match_update = self.update_matcher.match_png_bytes(shot)
+            self._log_match_score("update", match_update.score)
+            if match_update.score >= login_th and self._throttle(0.8):
+                self.adb.tap(match_update.center_x, match_update.center_y)
+                print(
+                    f"{self._stage_prefix()} [Flow] 命中 update 模板 score={match_update.score:.3f}, "
+                    f"点击({match_update.center_x},{match_update.center_y})"
+                )
+                return False
+
         # 一旦检测到 login_1，停止 login_0 检测
-        if match1.score >= 0.85 and not self.login1_mode:
+        if match1.score >= login_th and not self.login1_mode:
             self.login1_mode = True
             print(f"{self._stage_prefix()} [Flow] 检测到 login_1，停止 login_0 检测")
 
         if self.login1_mode:
             self._log_match_score("login_1", match1.score)
-            if match1.score >= 0.85 and self._throttle(0.8):
+            if match1.score >= login_th and self._throttle(0.8):
                 self.adb.tap(match1.center_x, match1.center_y)
                 print(
                     f"{self._stage_prefix()} [Flow] 命中 login_1 模板 score={match1.score:.3f}, 点击({match1.center_x},{match1.center_y})，进入 main_pre"
@@ -276,16 +296,13 @@ class StartupFlow:
             return False
 
         # 同时检测下的 login_0 路径（仅在未进入 login_1 模式时）
-        match0 = self.login_prompt_matcher.match_png_bytes(shot)
         self._log_match_score("login_0", match0.score)
-        if match0.score >= 0.85 and self._throttle(0.8):
+        if match0.score >= login_th and self._throttle(0.8):
             self.adb.tap(match0.center_x, match0.center_y)
             print(
                 f"{self._stage_prefix()} [Flow] 命中 login_0 模板 score={match0.score:.3f}, 点击({match0.center_x},{match0.center_y})"
             )
 
-        # 本轮也输出 login_1 分数，便于观察何时切换
-        match1 = self.login_confirm_matcher.match_png_bytes(shot)
         self._log_match_score("login_1", match1.score)
         return False
 
@@ -299,6 +316,7 @@ class StartupFlow:
             self._log_match_score("event_reward", match_reward.score)
             if match_reward.score >= self.event_reward_matcher.threshold:
                 self.login1_mode = False
+                self._skip_update_after_login_seen = False
                 self.main_pre_mode = False
                 self.main_screen_mode = True
                 self.chapter_selected = False
@@ -323,6 +341,7 @@ class StartupFlow:
         self._log_stage_if_changed("app_not_running")
         if self._throttle(2.0):
             self.login1_mode = False
+            self._skip_update_after_login_seen = False
             self.main_pre_mode = False
             self.main_screen_mode = False
             self.post_ann_close_deadline = 0.0
@@ -343,6 +362,7 @@ class StartupFlow:
         if state == GameState.APP_NOT_RUNNING:
             self._log_stage_if_changed("app_not_running")
             self.login1_mode = False
+            self._skip_update_after_login_seen = False
             self.main_pre_mode = False
             self.main_screen_mode = False
             self.post_ann_close_deadline = 0.0
@@ -360,6 +380,7 @@ class StartupFlow:
             self._log_stage_if_changed("app_not_running")
             if self._throttle(2.0):
                 self.login1_mode = False
+                self._skip_update_after_login_seen = False
                 self.main_pre_mode = False
                 self.main_screen_mode = False
                 self.post_ann_close_deadline = 0.0

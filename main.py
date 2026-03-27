@@ -5,6 +5,7 @@ from pathlib import Path
 from core.action import wait_until
 from core.bbchannel import launch_debug_and_monitor, run_forever
 from core.emulator import EmulatorLauncher
+from core.script_exit import apply_script_end_action_for_launcher
 from flows.startup_flow import StartupFlow
 
 
@@ -77,7 +78,14 @@ def _run_main() -> int:
         timeout_sec=launcher.config.home_wait_timeout_sec,
         interval_sec=0.5,
     )
-    if ok and launcher.config.bbchannel_enabled:
+    if flow.ordeal_call_handler.fatal_error:
+        print(flow.ordeal_call_handler.fatal_error)
+        apply_script_end_action_for_launcher(launcher)
+        return 3
+    if not ok:
+        apply_script_end_action_for_launcher(launcher)
+        return 2
+    if launcher.config.bbchannel_enabled:
         code = launch_debug_and_monitor(
             cmd_path=launcher.config.bbchannel_debug_cmd,
             workdir=launcher.config.bbchannel_workdir,
@@ -85,7 +93,8 @@ def _run_main() -> int:
         )
         if code == 0:
             run_forever()
-    return 0 if ok else 2
+    apply_script_end_action_for_launcher(launcher)
+    return 0
 
 
 if __name__ == "__main__":

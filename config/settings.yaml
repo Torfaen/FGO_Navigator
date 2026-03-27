@@ -12,3 +12,5 @@ bbchannel_enabled: true
 bbchannel_debug_cmd: "C:/Users/ASUS/Desktop/auto/BBchannel/启动.cmd"
 bbchannel_workdir: "C:/Users/ASUS/Desktop/auto/BBchannel"
 bbchannel_monitor_sec: 20
+# 脚本结束时：none=不操作 | close_game=关游戏 | close_emulator=关模拟器（含 BBchannel 跑完后的收尾）
+script_end_action: "close_game"

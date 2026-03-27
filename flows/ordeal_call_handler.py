@@ -1,8 +1,14 @@
 from pathlib import Path
 import time
+from typing import List, Optional
 
 from core.adb import AdbClient
 from core.vision import MatchResult, TemplateMatcher
+
+# 与 StartupFlow.close_matcher 相同：assets/templates/icon/close.png
+_CLOSE_TEMPLATE_SCALES: List[float] = [
+    round(2.0 - i * (1.7 / 9), 4) for i in range(10)
+]
 
 
 class OrdealCallHandler:
@@ -28,12 +34,19 @@ class OrdealCallHandler:
             use_gray=True,
             scales=[1.0, 0.8, 0.7, 0.62, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35, 0.3],
         )
+        self.mission_fail_close_matcher = TemplateMatcher(
+            str(Path("assets/templates/icon/close.png")),
+            threshold=0.78,
+            use_gray=True,
+            scales=_CLOSE_TEMPLATE_SCALES,
+        )
         self.last_time_clicked = False
         self.free_ordeal_checked_once = False
         self.last_time_search_down_swipe_done = 0
         self.last_time_search_right_swipe_done = 0
         self.mission_search_down_swipe_done = 0
         self.mission_clicked = False
+        self.fatal_error: Optional[str] = None  # 进入关卡失败等，置位后由 StartupFlow 结束 wait 并由 main 收尾
 
     def reset(self) -> None:
         self.last_time_clicked = False
@@ -42,6 +55,7 @@ class OrdealCallHandler:
         self.last_time_search_right_swipe_done = 0
         self.mission_search_down_swipe_done = 0
         self.mission_clicked = False
+        self.fatal_error = None
 
     def handle(
         self,
@@ -76,10 +90,13 @@ class OrdealCallHandler:
                 f"{stage_prefix} [Match] last_time score={match_last.score:.4f} ({match_last.score * 100:.2f}%)"
             )
             if match_last.score >= self.last_time_matcher.threshold:
-                adb.tap(match_last.center_x, match_last.center_y)
+                # 匹配中心偏上一点，更接近「上一次」可点区域
+                tap_x = match_last.center_x
+                tap_y = max(0, match_last.center_y - 20)
+                adb.tap(tap_x, tap_y)
                 self.last_time_clicked = True
                 print(
-                    f"{stage_prefix} [Flow] 命中 last_time 并点击({match_last.center_x},{match_last.center_y})，开始找目标小关卡"
+                    f"{stage_prefix} [Flow] 命中 last_time 并点击({tap_x},{tap_y})（中心上移20px），开始找目标小关卡"
                 )
                 return True, False, MatchResult(False, 0.0, 0, 0)
 
@@ -132,7 +149,18 @@ class OrdealCallHandler:
             time.sleep(1.0)
             return True, False, match_target
 
-        # 第四节点：只点击 mission_start
+        # 第四节点：无法开战弹窗上的「关闭」→ 致命错误并结束脚本（由 main 执行 script_end_action）
+        match_fail = self.mission_fail_close_matcher.match_png_bytes(shot)
+        print(
+            f"{stage_prefix} [Match] close (无法开战) score={match_fail.score:.4f} ({match_fail.score * 100:.2f}%)"
+        )
+        if match_fail.score >= self.mission_fail_close_matcher.threshold:
+            adb.tap(match_fail.center_x, match_fail.center_y)
+            self.fatal_error = "[异常] 进入关卡失败（无法开战弹窗，已尝试点「关闭」）"
+            print(f"{stage_prefix} [Flow] {self.fatal_error}")
+            time.sleep(0.3)
+            return True, False, match_fail
+
         match_start = self.mission_start_matcher.match_png_bytes(shot)
         print(
             f"{stage_prefix} [Match] mission_start score={match_start.score:.4f} ({match_start.score * 100:.2f}%)"
